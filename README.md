@@ -24,9 +24,9 @@ npm install
 The basic deployment unit for the CDK is called a _stack_ and is implemented via the [`Stack`](https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.Stack.html) construct. This project contains a number of `Stack` implementations in `src/stacks`; these are derived from a base `AppStack` class that implement shared features (like alarms, or removal policy). Some of these subclasses include:
 
 1. `ApiGatewayToSnsStack` - Creates an API Gateway with an endpoint to an SNS topic.
-2. `AppStack` - Implements a common, base app stack.
+2. `AppStack` - Implements a common, base app stack with resource tagging, etc.
 3. `BudgetsToSnsTopicStack` - Creates a Budget with an SNS Topic subscription.
-4. `CloudFrontToS3Stack` - Creates a CloudFront Distributio, optionally with an S3 Origin.
+4. `CloudFrontToS3Stack` - Creates a distribution, buckets for content and logs, a certificate, etc.
 5. `CloudWatchLogGroupStack` - Creates a CloudWatch Log Group with a KMS key.
 6. `KmsKeyStack` - Creates a rotating KMS key with the desired removal policy.
 7. `SnsTopicStack` - Creates an SNS Topic. Optionally, add subscribed SQS queues and associated dead-letter queues.
