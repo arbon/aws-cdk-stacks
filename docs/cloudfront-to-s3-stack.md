@@ -18,7 +18,7 @@ The primary services associated with the stack include: ACM, Cloudfront, Cloudwa
 
 **AWS::CloudFront::Distribution**
 
-- Provides a distribution.
+- Provides a distribution with a variety of features; for security, these include redirection to https and use of TLS 1.2; for performance, [HTTP/3](https://aws.amazon.com/blogs/aws/new-http-3-support-for-amazon-cloudfront/), compression, and caching for `GET` and `HEAD` requests.
 
 **AWS::CloudFront::OriginAccessControl**
 
@@ -26,12 +26,11 @@ The primary services associated with the stack include: ACM, Cloudfront, Cloudwa
 
 **AWS::Route53::RecordSet (x2)**
 
-- Provides `A` and `CNAME` records that connect the domain name from the certificate to the distribution domain name.
+- Provides `A` and `CNAME` DNS records that connect the domain name from the certificate to the distribution domain name.
 
 **AWS::S3::Bucket (x2)**
 
-- Provides a bucket for content.
-- Provides a bucket for Cloundfront distribution logs.
+- Buckets for web content and Cloundfront distribution logs are both [blocked from public access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html) and encrypted [Amazon S3 managed keys (SSE-S3)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html).
 
 **AWS::S3::BucketPolicy (x3)**
 
