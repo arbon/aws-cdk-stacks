@@ -6,7 +6,7 @@ import { Template } from 'aws-cdk-lib/assertions'
 import ApiGatewayToSnsStack from '../api-gateway-to-sns-stack.js'
 
 const env = {
-  account: '020260563340', region: 'us-east-1'
+  account: 'XXXXXXXXXXXX', region: 'us-east-1'
 }
 
 describe(ApiGatewayToSnsStack.name, () => {

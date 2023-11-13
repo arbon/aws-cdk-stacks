@@ -6,7 +6,7 @@ import { Template } from 'aws-cdk-lib/assertions'
 import CloudFrontToS3Stack from '../cloudfront-to-s3-stack.js'
 
 const env = {
-  account: '020260563340', region: 'us-east-1'
+  account: 'XXXXXXXXXXXX', region: 'us-east-1'
 }
 
 describe(CloudFrontToS3Stack.name, () => {

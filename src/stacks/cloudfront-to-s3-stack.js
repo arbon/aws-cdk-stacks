@@ -192,10 +192,14 @@ export class CloudFrontToS3Stack extends AppStack {
         s3OriginSource: {
           s3BucketSource: this.appContentBucket
         },
-        failoverCriteriaStatusCodes: [403, 404, 500, 502, 503, 504],
-        failoverS3OriginSource: {
-          s3BucketSource: this.appReplicationBucket
-        },
+        failoverCriteriaStatusCodes: this.appReplicationBucket
+          ? [403, 404, 500, 502, 503, 504]
+          : undefined,
+        failoverS3OriginSource: this.appReplicationBucket
+          ? {
+              s3BucketSource: this.appReplicationBucket
+            }
+          : undefined,
         behaviors: [{
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD,
