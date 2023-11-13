@@ -7,6 +7,7 @@ import iam from 'aws-cdk-lib/aws-iam'
 import route53 from 'aws-cdk-lib/aws-route53'
 import targets from 'aws-cdk-lib/aws-route53-targets'
 import s3 from 'aws-cdk-lib/aws-s3'
+import kms from 'aws-cdk-lib/aws-kms'
 
 import AppStack from './app-stack.js'
 
@@ -51,6 +52,16 @@ export class CloudFrontToS3Stack extends AppStack {
   appIsSinglePage = this.getContextValue('isSinglePage', false)
 
   /**
+   * The ARN for the KMS key used to encrypt replication bucket contents.
+   */
+  appReplicationKeyArn = this.getContextValue('replicationKeyArn')
+
+  /**
+   * The ARN for the S3 replication bucket.
+   */
+  appReplicationBucketArn = this.getContextValue('replicationBucketArn')
+
+  /**
    * Create a CloudFront distribution to a custom origin.
    *
    * @param scope The parent of this stack.
@@ -89,6 +100,85 @@ export class CloudFrontToS3Stack extends AppStack {
       versioned: true
     })
 
+    // Enable failover replication? We'll need the replication bucket and encryption key.
+
+    if (this.appReplicationKeyArn && this.appReplicationBucketArn) {
+      this.appReplicationBucket = s3.Bucket.fromBucketArn(this,
+        'ReplicationBucket', this.appReplicationBucketArn)
+
+      const replicationKey = kms.Key.fromKeyArn(this,
+        'ReplicationKey', this.appReplicationKeyArn)
+
+      const regionalKey = kms.Key.fromLookup(this, 'Key', {
+        aliasName: 'alias/aws/s3'
+      })
+
+      const replicationRole = new iam.Role(this, 'ReplicationRole', {
+        assumedBy: new iam.ServicePrincipal('s3.amazonaws.com')
+      })
+
+      replicationRole.addToPolicy(new iam.PolicyStatement({
+        actions: [
+          's3:GetObjectVersionAcl',
+          's3:GetObjectVersionForReplication',
+          's3:GetObjectVersionTagging',
+          's3:GetReplicationConfiguration',
+          's3:ListBucket'],
+        resources: [
+          this.appContentBucket.bucketArn, `${this.appContentBucket.bucketArn}/*`
+        ]
+      }))
+
+      replicationRole.addToPolicy(new iam.PolicyStatement({
+        actions: ['kms:Decrypt'],
+        resources: [regionalKey.keyArn],
+        conditions: {
+          StringLike: {
+            'kms:ViaService': 's3.us-east-1.amazonaws.com',
+            'kms:EncryptionContext:aws:s3:arn': [
+              `${this.appContentBucket.bucketArn}/*`
+            ]
+          }
+        }
+      }))
+
+      replicationRole.addToPolicy(new iam.PolicyStatement({
+        actions: ['kms:Encrypt'],
+        resources: [replicationKey.keyArn],
+        conditions: {
+          StringLike: {
+            'kms:ViaService': 's3.us-east-1.amazonaws.com',
+            'kms:EncryptionContext:aws:s3:arn': [
+              `${this.appReplicationBucket.bucketArn}/*`
+            ]
+          }
+        }
+      }))
+
+      replicationRole.addToPolicy(new iam.PolicyStatement({
+        actions: [
+          's3:ReplicateDelete',
+          's3:ReplicateObject',
+          's3:ReplicateTags'
+        ],
+        resources: [`${this.appReplicationBucket.bucketArn}/*`]
+      }))
+
+      const bucket = this.appContentBucket.node.defaultChild
+
+      bucket.addPropertyOverride('ReplicationConfiguration', {
+        Role: replicationRole.roleArn,
+        Rules: [
+          {
+            Destination: {
+              Bucket: this.appReplicationBucket.bucketArn
+            },
+            Status: 'Enabled'
+          }
+        ]
+      })
+    }
+
     this.appCertificate = new certificatemanager.Certificate(this, 'Certificate', {
       domainName: this.appDomainName,
       validation: certificatemanager.CertificateValidation.fromDns(this.appHostedZone)
@@ -101,6 +191,10 @@ export class CloudFrontToS3Stack extends AppStack {
       originConfigs: [{
         s3OriginSource: {
           s3BucketSource: this.appContentBucket
+        },
+        failoverCriteriaStatusCodes: [403, 404, 500, 502, 503, 504],
+        failoverS3OriginSource: {
+          s3BucketSource: this.appReplicationBucket
         },
         behaviors: [{
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
@@ -160,6 +254,11 @@ export class CloudFrontToS3Stack extends AppStack {
     distribution.addPropertyOverride('DistributionConfig.Origins.0.OriginAccessControlId',
       this.appOriginAccessControl.attrId)
 
+    if (this.appReplicationBucket) {
+      distribution.addPropertyOverride('DistributionConfig.Origins.1.OriginAccessControlId',
+        this.appOriginAccessControl.attrId)
+    }
+
     // Use managed response headers, cacne and origin request policies.
 
     distribution.addPropertyOverride('DistributionConfig.DefaultCacheBehavior.ResponseHeadersPolicyId',
@@ -176,10 +275,18 @@ export class CloudFrontToS3Stack extends AppStack {
       removalPolicy: this.appRemovalPolicy
     })
 
+    const resources = [
+      `${this.appContentBucket.bucketArn}/*`
+    ]
+
+    if (this.appReplicationBucketArn) {
+      resources.push(`${this.appReplicationBucketArn.bucketArn}/*`)
+    }
+
     this.appBucketPolicy.document.addStatements(
       new iam.PolicyStatement({
         actions: ['s3:GetObject'],
-        resources: [`${this.appContentBucket.bucketArn}/*`],
+        resources,
         principals: [new iam.ServicePrincipal('cloudfront.amazonaws.com')],
         effect: iam.Effect.ALLOW,
         conditions: {
@@ -190,7 +297,7 @@ export class CloudFrontToS3Stack extends AppStack {
       }),
       new iam.PolicyStatement({
         actions: ['s3:GetObject', 's3:PutObject'],
-        resources: [`${this.appContentBucket.bucketArn}/*`],
+        resources,
         principals: [new iam.AnyPrincipal()],
         effect: iam.Effect.DENY,
         conditions: {
